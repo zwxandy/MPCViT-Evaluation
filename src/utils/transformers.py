@@ -108,9 +108,20 @@ class Attention(Module):
         # attn = attn * self.t3(self.t2(self.t1(torch.sum(self.relu((attn / 2 + 1) ** 3), dim=-1, keepdim=True))))
 
         # print('Execute ReLUSoftmax') if self.alpha == 1 else print('Execute Scaling Attention')
-        attn = self.alpha * attn + (1 - self.alpha) * scalattn  # weighted-sum for arch searching
+        # attn = self.alpha * attn + (1 - self.alpha) * scalattn  # weighted-sum for arch searching
 
         # self.alpha.data = torch.clamp(self.alpha.data, min=0, max=1)
+
+        # modified: split heads and then concat them
+        for i, h in enumerate(self.alpha.squeeze()):
+            # print('i:', i, 'h:', h)
+            attn_head = attn[:, i, :, :]
+            # print(attn_head.shape)
+            if h == 1:  # relusoftmax
+                attn_head = self.relu(attn_head) / (torch.sum(self.relu(attn_head), dim=-1, keepdim=True) + self.eps)
+            elif h == 0:  # scalattn
+                attn_head = attn_head / attn_head.size(-1)
+            attn[:, i, :, :] = attn_head
 
         attn = self.attn_drop(attn)
         x = (attn @ v).transpose(1, 2)
